@@ -63,9 +63,9 @@ class function:
 if __name__ == "__main__":
 	strings = []
 	keys = []
-	while True:
-		func = sys.stdin.readline().strip()
-		if not func: break
+	for func in sys.stdin.readlines():
+		func = func.strip()
+		if not func: continue 
 
 		strings.append(func)
 
