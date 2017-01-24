@@ -1,3 +1,34 @@
+/*************************************************************************************
+*  Author: Stephanie Archibald <sarchibald@cylance.com>                              *
+*  Copyright (c) 2017 Cylance Inc. All rights reserved.                              *
+*                                                                                    *
+*  Redistribution and use in source and binary forms, with or without modification,  *
+*  are permitted provided that the following conditions are met:                     *
+*                                                                                    *
+*  1. Redistributions of source code must retain the above copyright notice, this    *
+*  list of conditions and the following disclaimer.                                  *
+*                                                                                    *
+*  2. Redistributions in binary form must reproduce the above copyright notice,      *
+*  this list of conditions and the following disclaimer in the documentation and/or  *
+*  other materials provided with the distribution.                                   *
+*                                                                                    *
+*  3. Neither the name of the copyright holder nor the names of its contributors     *
+*  may be used to endorse or promote products derived from this software without     *
+*  specific prior written permission.                                                *
+*                                                                                    *
+*  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND   *
+*  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED     *
+*  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE            *
+*  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR  *
+*  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES    *
+*  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;      *
+*  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON    *
+*  ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT           *
+*  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS     *
+*  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                      *
+*                                                                                    *
+*************************************************************************************/
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <errno.h>
@@ -18,6 +49,8 @@
 int IS_SIERRA = -1;
 
 int is_sierra(void) {
+	// returns 1 if running on Sierra, 0 otherwise
+	// this works because /bin/rcp was removed in Sierra
 	if(IS_SIERRA == -1) {
 		struct stat statbuf;
 		IS_SIERRA = (stat("/bin/rcp", &statbuf) != 0);
@@ -26,6 +59,7 @@ int is_sierra(void) {
 }
 
 int find_macho(unsigned long addr, unsigned long *base) {
+	// find a Mach-O header by searching from address.
 	*base = 0;
 
 	while(1) {
@@ -42,6 +76,7 @@ int find_macho(unsigned long addr, unsigned long *base) {
 }
 
 int find_epc(unsigned long base, struct entry_point_command **entry) {
+	// find the entry point command by searching through base's load commands
 
 	struct mach_header_64 *mh;
 	struct load_command *lc;
@@ -65,6 +100,8 @@ int find_epc(unsigned long base, struct entry_point_command **entry) {
 }
 
 unsigned long resolve_symbol(unsigned long base, unsigned int offset, unsigned int match) {
+	// Parse the symbols in the Mach-O image at base and return the address of the one
+	// matched by the offset / int pair (offset, match)
 	struct load_command *lc;
 	struct segment_command_64 *sc, *linkedit, *text;
 	struct symtab_command *symtab;
@@ -143,6 +180,7 @@ int load_from_disk(char *filename, char **buf, unsigned int *size) {
 }
 
 int load_and_exec(char *filename, unsigned long dyld) {
+	// Load the binary specified by filename using dyld
 	char *binbuf = NULL;
 	unsigned int size;
 	unsigned long addr;
@@ -150,7 +188,7 @@ int load_and_exec(char *filename, unsigned long dyld) {
 	NSObjectFileImageReturnCode(*create_file_image_from_memory)(const void *, size_t, NSObjectFileImage *) = NULL;
 	NSModule (*link_module)(NSObjectFileImage, const char *, unsigned long) = NULL;
 
-	//resolve symbols
+	//resolve symbols for NSCreateFileImageFromMemory & NSLinkModule
 	addr = resolve_symbol(dyld, 25, 0x4d6d6f72);
 	if(addr == -1) {
 		fprintf(stderr, "Could not resolve symbol: _sym[25] == 0x4d6d6f72.\n");
@@ -165,18 +203,21 @@ int load_and_exec(char *filename, unsigned long dyld) {
 	}
 	link_module = (NSModule (*)(NSObjectFileImage, const char *, unsigned long)) addr;
 
+	// load filename into a buf in memory
 	if(load_from_disk(filename, &binbuf, &size)) goto err;
 
+	// change the filetype to a bundle
 	int type = ((int *)binbuf)[3];
 	if(type != 0x8) ((int *)binbuf)[3] = 0x8; //change to mh_bundle type
 
-	//create file image
+	// create file image
 	NSObjectFileImage fi; 
 	if(create_file_image_from_memory(binbuf, size, &fi) != 1) {
 		fprintf(stderr, "Could not create image.\n");
 		goto err;
 	}
 
+	// link image
 	NSModule nm = link_module(fi, "mytest", NSLINKMODULE_OPTION_PRIVATE |
 						                NSLINKMODULE_OPTION_BINDNOW);
 	if(!nm) {
@@ -184,6 +225,7 @@ int load_and_exec(char *filename, unsigned long dyld) {
 		goto err;
 	}
 
+	// find entry point and call it
 	if(type == 0x2) { //mh_execute
 		unsigned long execute_base = *(unsigned long *)((unsigned long)nm + (is_sierra() ? 0x50 : 0x48));
 		struct entry_point_command *epc;
@@ -214,6 +256,7 @@ int main(int ac, char **av) {
 
 	unsigned long binary, dyld; 
 
+	// find dyld based on os version
 	if(is_sierra()) {
 		if(find_macho(EXECUTABLE_BASE_ADDR, &binary)) return 1;
 		if(find_macho(binary + 0x1000, &dyld)) return 1;
@@ -221,5 +264,6 @@ int main(int ac, char **av) {
 		if(find_macho(DYLD_BASE, &dyld)) return 1;
 	}
 
+	// load and execute the specified binary
 	return load_and_exec(av[1], dyld);
 }
