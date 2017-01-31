@@ -1,4 +1,4 @@
-#Running Executables on OSX from Memory
+#Running Executables on macOS from Memory
 
 This is the code repo for the blog post located <here>.
 
