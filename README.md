@@ -4,7 +4,7 @@ This is the code repo for the blog post located <here>.
 
 ##symbolyzer.py
 
-symbolyzer.py is used for generating unique offsets / ints for a list of symbols.  It can be run in the following manner to do so for dyld: 
+symbolyzer.py is used for generating unique offsets / ints for a list of symbols to use for matching in place of a hash algorithm.  It can be run in the following manner to do so for dyld: 
 
 > $ nm /usr/lib/dyld | cut -d" " -f3 | sort | uniq | python symbolyzer.py
 
