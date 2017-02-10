@@ -58,19 +58,23 @@ int is_sierra(void) {
 	return IS_SIERRA;
 }
 
-int find_macho(unsigned long addr, unsigned long *base) {
+int find_macho(unsigned long addr, unsigned long *base, unsigned int increment, unsigned int dereference) {
+	unsigned long ptr;
+
 	// find a Mach-O header by searching from address.
 	*base = 0;
-
+		
 	while(1) {
-		chmod((char *)addr, 0777);
+		ptr = addr;
+		if(dereference) ptr = *(unsigned long *)ptr;
+		chmod((char *)ptr, 0777);
 		if(errno == 2 /*ENOENT*/ &&
-			((int *)addr)[0] == 0xfeedfacf /*MH_MAGIC_64*/) {
-			*base = addr;
+			((int *)ptr)[0] == 0xfeedfacf /*MH_MAGIC_64*/) {
+			*base = ptr;
 			return 0;
 		}
 
-		addr += 0x1000;
+		addr += increment;
 	}
 	return 1;
 }
@@ -227,8 +231,13 @@ int load_and_exec(char *filename, unsigned long dyld) {
 
 	// find entry point and call it
 	if(type == 0x2) { //mh_execute
-		unsigned long execute_base = *(unsigned long *)((unsigned long)nm + (is_sierra() ? 0x50 : 0x48));
+		unsigned long execute_base;
 		struct entry_point_command *epc;
+
+		if(find_macho((unsigned long)nm, &execute_base, sizeof(int), 1)) {
+			fprintf(stderr, "Could not find execute_base.\n");
+			goto err;
+		}
 
 		if(find_epc(execute_base, &epc)) {
 			fprintf(stderr, "Could not find ec.\n");
@@ -258,10 +267,10 @@ int main(int ac, char **av) {
 
 	// find dyld based on os version
 	if(is_sierra()) {
-		if(find_macho(EXECUTABLE_BASE_ADDR, &binary)) return 1;
-		if(find_macho(binary + 0x1000, &dyld)) return 1;
+		if(find_macho(EXECUTABLE_BASE_ADDR, &binary, 0x1000, 0)) return 1;
+		if(find_macho(binary + 0x1000, &dyld, 0x1000, 0)) return 1;
 	} else {
-		if(find_macho(DYLD_BASE, &dyld)) return 1;
+		if(find_macho(DYLD_BASE, &dyld, 0x1000, 0)) return 1;
 	}
 
 	// load and execute the specified binary
