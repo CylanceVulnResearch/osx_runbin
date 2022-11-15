@@ -183,7 +183,7 @@ int load_from_disk(char *filename, char **buf, unsigned int *size) {
 	return 0;
 }
 
-int load_and_exec(char *filename, unsigned long dyld) {
+int load_and_exec(char *filename, unsigned long dyld, int ac, char **av) {
 	// Load the binary specified by filename using dyld
 	char *binbuf = NULL;
 	unsigned int size;
@@ -245,11 +245,9 @@ int load_and_exec(char *filename, unsigned long dyld) {
 		}
 
 		int(*main)(int, char**, char**, char**) = (int(*)(int, char**, char**, char**))(execute_base + epc->entryoff); 
-		char *argv[]={"test", NULL};
-		int argc = 1;
 		char *env[] = {NULL};
 		char *apple[] = {NULL};
-		return main(argc, argv, env, apple);
+		return main(ac, av, env, apple);
 	}	
 err:
 	if(binbuf) free(binbuf);
@@ -257,8 +255,8 @@ err:
 }
 
 int main(int ac, char **av) {
-	
-	if(ac != 2) {
+
+	if(ac < 2) {
 		fprintf(stderr, "usage: %s <filename>\n", av[0]);
 		exit(1);
 	}
@@ -274,5 +272,5 @@ int main(int ac, char **av) {
 	}
 
 	// load and execute the specified binary
-	return load_and_exec(av[1], dyld);
+	return load_and_exec(av[1], dyld, ac-1, &av[1]);
 }
