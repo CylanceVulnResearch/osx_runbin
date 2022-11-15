@@ -257,7 +257,7 @@ err:
 int main(int ac, char **av) {
 
 	if(ac < 2) {
-		fprintf(stderr, "usage: %s <filename>\n", av[0]);
+		fprintf(stderr, "usage: %s <filename> arg1 arg2 ...\n", av[0]);
 		exit(1);
 	}
 
